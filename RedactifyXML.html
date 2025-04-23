@@ -1,0 +1,553 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RedactifyXML</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* Main container */
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: #2d3748;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Headings */
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #edf2f7;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #cbd5e0;
+            margin-bottom: 16px;
+        }
+
+        /* Labels */
+        label {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #a0aec0;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        /* Textareas and inputs */
+        textarea, input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            font-size: 1rem;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            background-color: #3c4b64;
+            color: #e2e8f0;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            resize: vertical;
+        }
+
+        textarea:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #7f9cf5;
+            box-shadow: 0 0 0 3px rgba(127, 156, 245, 0.3);
+        }
+
+        textarea {
+            min-height: 150px;
+        }
+
+        input[type="text"] {
+            max-width: 400px;
+        }
+
+        /* Buttons */
+        button {
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        #scrubButton, #addSectionButton {
+            display: block;
+            width: 100%;
+            max-width: 200px;
+            margin: 16px auto;
+            background-color: #6366f1;
+        }
+
+        #scrubButton:hover, #addSectionButton:hover {
+            background-color: #4f46e5;
+            transform: translateY(-2px);
+        }
+
+        #scrubButton:active, #addSectionButton:active {
+            transform: translateY(0);
+        }
+
+        .removeSectionButton {
+            padding: 8px 16px;
+            background-color: #e53e3e;
+            margin-left: 8px;
+        }
+
+        .removeSectionButton:hover {
+            background-color: #c53030;
+            transform: translateY(-2px);
+        }
+
+        .removeSectionButton:active {
+            transform: translateY(0);
+        }
+
+        .copyButton {
+            padding: 8px 16px;
+            background-color: #38a169;
+            margin-left: 8px;
+        }
+
+        .copyButton:hover {
+            background-color: #2f855a;
+            transform: translateY(-2px);
+        }
+
+        .copyButton:active {
+            transform: translateY(0);
+        }
+
+        .copyButton.copied {
+            background-color: #2f855a;
+        }
+
+        /* XML section */
+        .xml-section {
+            margin-bottom: 32px;
+            padding: 16px;
+            background: #374151;
+            border-radius: 8px;
+        }
+
+        .xml-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        /* Diff viewer */
+        .diff-viewer {
+            margin-top: 8px;
+            padding: 12px;
+            background: #2a2f3b;
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+        }
+
+        .diff-entry {
+            margin-bottom: 4px;
+        }
+
+        .diff-entry strong {
+            color: #f59e0b;
+        }
+
+        .diff-original {
+            color: #fc8181;
+            background-color: rgba(255, 0, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        .diff-scrubbed {
+            color: #68d391;
+            background-color: rgba(0, 255, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        /* Error message */
+        #error {
+            color: #fc8181;
+            font-size: 0.875rem;
+            text-align: left;
+            margin-top: 16px;
+        }
+
+        #error ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #error li {
+            margin-bottom: 4px;
+        }
+
+        /* Disclaimer */
+        .disclaimer {
+            font-size: 0.875rem;
+            color: #a0aec0;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            h2 {
+                font-size: 1.1rem;
+            }
+
+            textarea, input[type="text"] {
+                font-size: 0.875rem;
+            }
+
+            button {
+                font-size: 0.875rem;
+                padding: 10px;
+            }
+
+            .removeSectionButton, .copyButton {
+                padding: 6px 12px;
+            }
+
+            .diff-viewer {
+                font-size: 0.75rem;
+            }
+
+            .disclaimer {
+                font-size: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RedactifyXML</h1>
+        <div class="disclaimer">
+            This app processes all data locally in your browser. No data is sent to any server. Be mindful that copied scrubbed XML may remain in your clipboard until overwritten. Ensure clipboard permissions are enabled for the copy feature (best used on HTTPS or localhost).
+        </div>
+        <div id="xmlSections">
+            <div class="xml-section" data-id="1">
+                <div class="xml-section-header">
+                    <h2>XML Section 1</h2>
+                    <button class="removeSectionButton" onclick="removeSection(1)">Remove Section</button>
+                </div>
+                <label for="inputXml-1">Input XML:</label>
+                <textarea id="inputXml-1" placeholder="Paste your XML here..."></textarea>
+                <label for="tags-1">Tags to scrub (comma-separated, e.g., firstname, lastname, ssn, address):</label>
+                <input type="text" id="tags-1" placeholder="e.g., firstname, lastname, ssn, address">
+                <div class="output-header">
+                    <label for="outputXml-1">Scrubbed XML:</label>
+                    <button class="copyButton" onclick="copyScrubbedXml(1)">Copy</button>
+                </div>
+                <textarea id="outputXml-1" placeholder="Scrubbed XML will appear here..." readonly></textarea>
+                <div class="diff-viewer" id="diffViewer-1"></div>
+            </div>
+        </div>
+        <button id="addSectionButton">Add Another Section</button>
+        <button id="scrubButton">Scrub All XMLs</button>
+        <div id="error"></div>
+    </div>
+
+    <script>
+        let sectionIds = [1];
+
+        // Function to find all elements with specified tags and their content
+        function findScrubbedElements(xmlDoc, tags) {
+            const result = [];
+            tags.forEach(tag => {
+                const elements = xmlDoc.getElementsByTagName(tag);
+                Array.from(elements).forEach(element => {
+                    const originalContent = element.textContent.trim();
+                    if (originalContent) {
+                        result.push({
+                            tag: tag,
+                            originalContent: originalContent,
+                            scrubbedContent: 'REDACTED'
+                        });
+                    }
+                });
+            });
+            return result;
+        }
+
+        // Copy scrubbed XML to clipboard
+        function copyScrubbedXml(sectionId) {
+            const outputXml = document.getElementById(`outputXml-${sectionId}`).value;
+            const copyButton = document.querySelector(`.xml-section[data-id="${sectionId}"] .copyButton`);
+            const errorDiv = document.getElementById('error');
+
+            if (outputXml) {
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(outputXml).then(() => {
+                        copyButton.textContent = 'Copied!';
+                        copyButton.classList.add('copied');
+                        setTimeout(() => {
+                            copyButton.textContent = 'Copy';
+                            copyButton.classList.remove('copied');
+                        }, 2000);
+                    }).catch(() => {
+                        fallbackCopyTextToClipboard(outputXml, copyButton, errorDiv);
+                    });
+                } else {
+                    fallbackCopyTextToClipboard(outputXml, copyButton, errorDiv);
+                }
+            } else {
+                errorDiv.textContent = `Section ${sectionId}: No scrubbed XML to copy. Please scrub the XML first.`;
+                errorDiv.style.color = '#fc8181';
+                setTimeout(() => {
+                    errorDiv.textContent = '';
+                }, 3000);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text, copyButton, errorDiv) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                copyButton.textContent = 'Copied!';
+                copyButton.classList.add('copied');
+                setTimeout(() => {
+                    copyButton.textContent = 'Copy';
+                    copyButton.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                errorDiv.textContent = `Section ${copyButton.closest('.xml-section').dataset.id}: Failed to copy scrubbed XML. Please enable clipboard permissions or copy manually.`;
+                errorDiv.style.color = '#fc8181';
+                setTimeout(() => {
+                    errorDiv.textContent = '';
+                }, 3000);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // Add new XML section
+        function addSection() {
+            let newId = 1;
+            while (sectionIds.includes(newId)) {
+                newId++;
+            }
+            sectionIds.push(newId);
+            const xmlSections = document.getElementById('xmlSections');
+            const newSection = document.createElement('div');
+            newSection.className = 'xml-section';
+            newSection.dataset.id = newId;
+            newSection.innerHTML = `
+                <div class="xml-section-header">
+                    <h2>XML Section ${newId}</h2>
+                    <button class="removeSectionButton" onclick="removeSection(${newId})">Remove Section</button>
+                </div>
+                <label for="inputXml-${newId}">Input XML:</label>
+                <textarea id="inputXml-${newId}" placeholder="Paste your XML here..."></textarea>
+                <label for="tags-${newId}">Tags to scrub (comma-separated, e.g., firstname, lastname, ssn, address):</label>
+                <input type="text" id="tags-${newId}" placeholder="e.g., firstname, lastname, ssn, address">
+                <div class="output-header">
+                    <label for="outputXml-${newId}">Scrubbed XML:</label>
+                    <button class="copyButton" onclick="copyScrubbedXml(${newId})">Copy</button>
+                </div>
+                <textarea id="outputXml-${newId}" placeholder="Scrubbed XML will appear here..." readonly></textarea>
+                <div class="diff-viewer" id="diffViewer-${newId}"></div>
+            `;
+            xmlSections.appendChild(newSection);
+        }
+
+        // Remove XML section
+        function removeSection(id) {
+            const section = document.querySelector(`.xml-section[data-id="${id}"]`);
+            if (section) {
+                section.remove();
+                sectionIds = sectionIds.filter(sid => sid !== id);
+            }
+            if (sectionIds.length === 0) {
+                addSection();
+            }
+        }
+
+        // Scrub all XMLs and show diffs
+        document.getElementById('scrubButton').addEventListener('click', () => {
+            const errorDiv = document.getElementById('error');
+            errorDiv.innerHTML = '';
+            const errors = [];
+
+            document.querySelectorAll('.xml-section').forEach(section => {
+                const sectionId = section.dataset.id;
+                const inputXml = document.getElementById(`inputXml-${sectionId}`).value.trim();
+                const tagsInput = document.getElementById(`tags-${sectionId}`).value.trim();
+                const outputXmlArea = document.getElementById(`outputXml-${sectionId}`);
+                const diffViewer = document.getElementById(`diffViewer-${sectionId}`);
+                const tags = tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag);
+
+                // Reset output and diff viewer
+                outputXmlArea.value = '';
+                diffViewer.innerHTML = '';
+
+                // Check for errors
+                if (!inputXml) {
+                    errors.push(`Section ${sectionId}: Input XML is empty.`);
+                    return;
+                }
+                if (!tagsInput) {
+                    errors.push(`Section ${sectionId}: Tags are missing.`);
+                    return;
+                }
+
+                try {
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(inputXml, 'application/xml');
+                    const parserError = xmlDoc.getElementsByTagName('parsererror');
+                    if (parserError.length > 0) {
+                        errors.push(`Section ${sectionId}: Invalid XML format. Check for syntax errors.`);
+                        return;
+                    }
+
+                    // Check if any tags are found in XML
+                    const foundTags = tags.filter(tag => xmlDoc.getElementsByTagName(tag).length > 0);
+                    if (foundTags.length === 0) {
+                        errors.push(`Section ${sectionId}: No matching tags found in XML for scrubbing.`);
+                        return;
+                    }
+
+                    // Find all elements to scrub before modifying the XML
+                    const diffs = findScrubbedElements(xmlDoc, tags);
+
+                    // Scrub the specified tags
+                    tags.forEach(tag => {
+                        const elements = xmlDoc.getElementsByTagName(tag);
+                        Array.from(elements).forEach(element => {
+                            element.textContent = 'REDACTED';
+                        });
+                    });
+
+                    const serializer = new XMLSerializer();
+                    const scrubbedXml = serializer.serializeToString(xmlDoc);
+                    outputXmlArea.value = scrubbedXml;
+
+                    // Display diffs
+                    if (diffs.length === 0) {
+                        diffViewer.textContent = 'No changes detected.';
+                    } else {
+                        diffs.forEach(change => {
+                            const div = document.createElement('div');
+                            div.className = 'diff-entry';
+                            div.innerHTML = `<strong>${change.tag}</strong>: <span class="diff-original">${change.originalContent}</span> -> <span class="diff-scrubbed">${change.scrubbedContent}</span>`;
+                            diffViewer.appendChild(div);
+                        });
+                    }
+                } catch (e) {
+                    errors.push(`Section ${sectionId}: Error processing XML - ${e.message}`);
+                }
+            });
+
+            if (errors.length > 0) {
+                const ul = document.createElement('ul');
+                errors.forEach(error => {
+                    const li = document.createElement('li');
+                    li.textContent = error;
+                    ul.appendChild(li);
+                });
+                errorDiv.appendChild(ul);
+            } else {
+                errorDiv.textContent = 'All XMLs scrubbed successfully!';
+                errorDiv.style.color = '#68d391';
+                setTimeout(() => {
+                    errorDiv.textContent = '';
+                    errorDiv.style.color = '#fc8181';
+                }, 3000);
+            }
+        });
+
+        // Add another section
+        document.getElementById('addSectionButton').addEventListener('click', addSection);
+    </script>
+</body>
+</html>

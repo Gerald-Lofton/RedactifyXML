@@ -5,7 +5,7 @@
 
   
 
-![GitHub License](https://img.shields.io/github/license/yourusername/RedactifyXML?style=flat-square)
+![GitHub License](https://img.shields.io/github/license/Gerald-Lofton/RedactifyXML?style=flat-square)
 
 ![GitHub Repo stars](https://img.shields.io/github/stars/Gerald-Lofton/RedactifyXML?style=flat-square)
 
